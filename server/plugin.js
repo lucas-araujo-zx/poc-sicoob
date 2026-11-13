@@ -139,6 +139,10 @@ export async function dispatchApi({ method, pathname, searchParams, token, body 
   const denied = authError(token, env)
   if (denied) return { status: denied.status, payload: { error: denied.error } }
 
+  if (!voice.id) {
+    return { status: 503, payload: { error: 'O agente desta bancada ainda não foi configurado.' } }
+  }
+
   if (path === '/api/catalog' && method === 'GET') {
     const loaded = await loadAgent(env, voice)
     if (loaded.error) return { status: loaded.error.status, payload: { error: loaded.error.error } }

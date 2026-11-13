@@ -7,7 +7,7 @@ import { dispatchApi } from './plugin.js'
 const env = {
   loginToken: 'token-da-bancada',
   apiKey: 'chave',
-  voiceAgentId: 'agent_3201m780raakfbzbm55ntd1v00hq',
+  voiceAgentId: 'agent_teste_sicoob',
   dialerId: 'dialer_teste',
   atendeApiKey: 'key',
   atendeDialerToken: 'token',

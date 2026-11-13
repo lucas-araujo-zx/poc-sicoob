@@ -1,5 +1,4 @@
 import { dispatchApi } from './plugin.js'
-import { SHARED_DIALER_ID } from './agents.js'
 
 function headerValue(req, name) {
   const value = req.headers[name] ?? req.headers[name.toLowerCase()]
@@ -67,15 +66,10 @@ export default async function handler(req, res) {
         body,
       },
       {
-        loginToken:
-          process.env.SICOOB_LOGIN_TOKEN ||
-          process.env.VIVEO_LOGIN_TOKEN ||
-          process.env.ALMAVIVA_LOGIN_TOKEN ||
-          process.env.ICATU_LOGIN_TOKEN ||
-          '',
+        loginToken: process.env.SICOOB_LOGIN_TOKEN ?? '',
         apiKey: process.env.ELEVENLABS_API_KEY ?? '',
         voiceAgentId: process.env.SICOOB_VOICE_AGENT ?? '',
-        dialerId: process.env.SICOOB_DIALER_ID || SHARED_DIALER_ID,
+        dialerId: process.env.SICOOB_DIALER_ID ?? '',
         atendeApiKey: process.env.ATENDESIMPLES_API_KEY ?? '',
         atendeDialerToken: process.env.ATENDESIMPLES_DIALER_TOKEN ?? '',
         atendeBaseUrl: process.env.ATENDESIMPLES_BASE_URL ?? '',
