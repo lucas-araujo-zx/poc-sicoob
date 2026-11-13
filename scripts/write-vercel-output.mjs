@@ -1,18 +1,15 @@
-import { cp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const output = join(root, '.vercel/output')
 const funcDir = join(output, 'functions/api/login.func')
-const serverFiles = [
-  'vercel-handler.js',
-  'plugin.js',
-  'agents.js',
-  'conversation.js',
-  'placeCall.js',
-  'variables.js',
-]
+
+// Todo módulo de server/ entra na função: cada import novo precisa estar no pacote.
+const serverFiles = (await readdir(join(root, 'server'))).filter(
+  (file) => file.endsWith('.js') && !file.endsWith('.test.js'),
+)
 
 await rm(output, { recursive: true, force: true })
 await mkdir(funcDir, { recursive: true })
