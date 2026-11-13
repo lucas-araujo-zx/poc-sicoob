@@ -1,8 +1,10 @@
+import { BrandMark } from './BrandMark.jsx'
+
 export function Home({ agentName, onTalk, onCall, onSignOut }) {
   return (
     <div className="login-page home-page">
       <header className="login-top">
-        <p className="wordmark">Sicoob</p>
+        <BrandMark />
         <button type="button" className="quiet" onClick={onSignOut}>
           Sair
         </button>

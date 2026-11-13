@@ -1,3 +1,5 @@
+import { sipNameOf } from './fields.js'
+
 const CARD_INFO_3_MAX_LENGTH = 255
 const DH01_PREFIX = 'DH01:'
 const VALUE_EXTRA = new Set(':/=?._,!&$%+'.split(''))
@@ -72,7 +74,8 @@ export function buildCard({ fields, dialerId, callIdPrefix = 'sicoob' }) {
     const sipValue = /celular|phone|tel|whatsapp|mobile/i.test(name)
       ? normalizeBrPhone(value) || value.replace(/\D/g, '')
       : sanitizeSipValue(value)
-    if (sipValue) pairs.push({ name, value: sipValue })
+    const sipName = sipNameOf(name)
+    if (sipValue && sipName) pairs.push({ name: sipName, value: sipValue })
   }
   const encoded = encodeCardInfo3(pairs)
   const safe = String(callIdPrefix).replace(/[^A-Za-z0-9_]/g, '').slice(0, 8) || 'sicoob'

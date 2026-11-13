@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { BrandMark } from './BrandMark.jsx'
 
 export function Login({ error, loading, onSubmit }) {
   const [token, setToken] = useState('')
@@ -30,7 +31,7 @@ export function Login({ error, loading, onSubmit }) {
         Ir para o acesso
       </a>
       <header className="login-top">
-        <p className="wordmark">Sicoob</p>
+        <BrandMark />
         <p>Ciro · cobrança</p>
       </header>
       <section className="login-stage">

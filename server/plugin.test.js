@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { tokensMatch } from './agents.js'
-import { encodeCardInfo3, normalizeBrPhone } from './placeCall.js'
+import { buildCard, encodeCardInfo3, normalizeBrPhone } from './placeCall.js'
 import { dispatchApi } from './plugin.js'
 
 const env = {
@@ -112,8 +112,75 @@ test('a sessão e a ligação exigem os campos', async () => {
 test('a ficha da AtendeSimples usa o mesmo formato DH01', () => {
   assert.equal(normalizeBrPhone('+55 (11) 99999-8888'), '11999998888')
   const encoded = encodeCardInfo3([
-    { name: 'nome_cooperado', value: 'Ana Souza' },
-    { name: 'saldo_divida', value: 'R$ 1.850,00' },
+    { name: 'nomecooperado', value: 'Ana Souza' },
+    { name: 'saldodivida', value: 'R$ 1.850,00' },
   ])
-  assert.equal(encoded.value, 'DH01:nome_cooperado:Ana Souza#saldo_divida:R$ 1.850,00')
+  assert.equal(encoded.value, 'DH01:nomecooperado:Ana Souza#saldodivida:R$ 1.850,00')
+})
+
+test('a ficha manda os nomes SIP sem underscore, que viram {{sip_...}} no agente', () => {
+  const built = buildCard({
+    fields: {
+      nome_cooperado: 'Ana Souza',
+      celular: '(11) 99999-8888',
+      saldo_divida: 'R$ 1.850,00',
+      dias_vencidos: '42',
+      desconto_a_vista: '10',
+      max_parcelas: '5',
+      juros: '1,5',
+    },
+    dialerId: 'dialer_teste',
+  })
+  assert.equal(built.card.number_primary, '11999998888')
+  assert.equal(built.card.card_info_1, built.callId)
+  assert.equal(
+    built.card.card_info_3,
+    'DH01:nomecooperado:Ana Souza#celular:11999998888#saldodivida:R$ 1.850,00#diasvencidos:42#descontoavista:10#maxparcelas:5#juros:1,5',
+  )
+})
+
+test('o valor digitado chega à ligação, não o padrão', () => {
+  const built = buildCard({
+    fields: { nome_cooperado: 'Rodriguito', celular: '21997929787', saldo_divida: '100' },
+    dialerId: 'dialer_teste',
+  })
+  assert.match(built.card.card_info_3, /nomecooperado:Rodriguito/)
+  assert.doesNotMatch(built.card.card_info_3, /Ana Souza|1850/)
+})
+
+test('a conversa da ligação é achada pelo call_sid e pela janela de tempo', async () => {
+  const callId = `sicoob_${Date.now().toString(36)}`
+  const original = globalThis.fetch
+  const seen = []
+  globalThis.fetch = async (url) => {
+    const href = String(url)
+    seen.push(href)
+    if (href.includes('/v1/convai/conversations?')) {
+      return new Response(JSON.stringify({ conversations: [{ conversation_id: 'conv_outraligacao1' }, { conversation_id: 'conv_ligacao0001' }] }), { status: 200 })
+    }
+    if (href.endsWith('conv_outraligacao1')) {
+      return new Response(JSON.stringify({ agent_id: 'agent_teste_sicoob', status: 'done', metadata: { phone_call: { call_sid: 'sicoob_outra' } } }), { status: 200 })
+    }
+    if (href.endsWith('conv_ligacao0001')) {
+      return new Response(JSON.stringify({
+        conversation_id: 'conv_ligacao0001',
+        agent_id: 'agent_teste_sicoob',
+        status: 'processing',
+        metadata: { phone_call: { call_sid: callId } },
+      }), { status: 200 })
+    }
+    return new Response('no', { status: 500 })
+  }
+  try {
+    const found = await call('GET', '/api/conversation', env.loginToken, `call_id=${callId}`)
+    assert.equal(found.status, 200)
+    assert.equal(found.payload.found, true)
+    assert.equal(found.payload.conversationId, 'conv_ligacao0001')
+    assert.equal(found.payload.ready, false)
+    assert.equal(found.payload.status, 'processing')
+    const list = seen.find((href) => href.includes('/v1/convai/conversations?'))
+    assert.match(list, /call_start_after_unix=\d+/)
+  } finally {
+    globalThis.fetch = original
+  }
 })

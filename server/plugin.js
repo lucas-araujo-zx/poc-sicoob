@@ -1,9 +1,12 @@
 import { agentDisplayName, resolveAgent, tokensMatch } from './agents.js'
 import { isConversationId, presentConversation } from './conversation.js'
+import { declaredVariables, readVariableValues } from './variables.js'
+import { promptVariables } from './fields.js'
 import { placeCall } from './placeCall.js'
-import { collectVariables, readVariableValues } from './variables.js'
 
 const CALL_ID = /^[A-Za-z0-9_]{6,80}$/
+// Margem antes do horário da ligação ao buscar conversas (a ligação pode ter sido aceita um pouco depois).
+const LOOKUP_MARGIN_SECS = 120
 
 function requestUrl(req) {
   return new URL(req.url ?? '/', 'http://localhost')
@@ -98,17 +101,26 @@ async function loadAgent(env, agent) {
   return { agent: remote.body, name: agentDisplayName(remote.body) || agent.name }
 }
 
-function containsCallId(conversation, callId) {
+// O callId da ligação (X-CALL-ID) chega ao ElevenLabs como `system__call_sid`
+// e em `metadata.phone_call.call_sid`.
+function matchesCall(conversation, callId) {
+  if (conversation?.metadata?.phone_call?.call_sid === callId) return true
   const packet = conversation?.conversation_initiation_client_data
-  if (!packet) return false
-  return JSON.stringify(packet).includes(callId)
+  if (packet?.dynamic_variables?.system__call_sid === callId) return true
+  return Boolean(packet) && JSON.stringify(packet).includes(callId)
+}
+
+// `sicoob_<base36 ms>`: o último pedaço é o instante do pedido, em milissegundos.
+function callStartedAt(callId) {
+  const stamp = parseInt(callId.split('_').pop() ?? '', 36)
+  return Number.isFinite(stamp) && stamp > 0 ? Math.floor(stamp / 1000) : null
 }
 
 async function findConversation(env, agentId, callId) {
-  const remote = await elevenFetch(
-    env,
-    `/v1/convai/conversations?agent_id=${encodeURIComponent(agentId)}&page_size=8`,
-  )
+  const params = new URLSearchParams({ agent_id: agentId, page_size: '30' })
+  const since = callStartedAt(callId)
+  if (since) params.set('call_start_after_unix', String(since - LOOKUP_MARGIN_SECS))
+  const remote = await elevenFetch(env, `/v1/convai/conversations?${params.toString()}`)
   if (!remote.ok) return { error: remote }
   const list = Array.isArray(remote.body?.conversations) ? remote.body.conversations : []
   for (const item of list) {
@@ -118,7 +130,7 @@ async function findConversation(env, agentId, callId) {
     if (!detail.ok) continue
     const owner = typeof detail.body?.agent_id === 'string' ? detail.body.agent_id : ''
     if (owner && owner !== agentId) continue
-    if (!containsCallId(detail.body, callId)) continue
+    if (!matchesCall(detail.body, callId)) continue
     return { conversation: presentConversation(detail.body, id) }
   }
   return { conversation: null }
@@ -150,16 +162,13 @@ export async function dispatchApi({ method, pathname, searchParams, token, body 
       status: 200,
       payload: {
         agent: { id: voice.id, name: loaded.name },
-        variables: collectVariables(loaded.agent),
+        variables: declaredVariables(),
       },
     }
   }
 
   if (path === '/api/session' && method === 'POST') {
-    const loaded = await loadAgent(env, voice)
-    if (loaded.error) return { status: loaded.error.status, payload: { error: loaded.error.error } }
-    const declared = collectVariables(loaded.agent)
-    const filled = readVariableValues(declared, body?.variables)
+    const filled = readVariableValues(declaredVariables(), body?.variables)
     if (filled.missing.length) {
       return { status: 400, payload: { error: 'Preencha os campos para prosseguir.', missing: filled.missing } }
     }
@@ -173,15 +182,12 @@ export async function dispatchApi({ method, pathname, searchParams, token, body 
     }
     return {
       status: 200,
-      payload: { signedUrl: remote.body.signed_url, dynamicVariables: filled.values },
+      payload: { signedUrl: remote.body.signed_url, dynamicVariables: promptVariables(filled.values) },
     }
   }
 
   if (path === '/api/call' && method === 'POST') {
-    const loaded = await loadAgent(env, voice)
-    if (loaded.error) return { status: loaded.error.status, payload: { error: loaded.error.error } }
-    const declared = collectVariables(loaded.agent)
-    const filled = readVariableValues(declared, body?.variables)
+    const filled = readVariableValues(declaredVariables(), body?.variables)
     if (filled.missing.length) {
       return { status: 400, payload: { error: 'Preencha os campos para prosseguir.', missing: filled.missing } }
     }

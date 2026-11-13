@@ -1,45 +1,7 @@
-const SKIP_VARIABLE = /^(system__|secret__|sip_)/i
-const TOKEN = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g
+import { VARIABLE_FIELDS } from './fields.js'
 
-function textsOf(agent) {
-  const texts = [
-    agent?.conversation_config?.agent?.prompt?.prompt,
-    agent?.conversation_config?.agent?.first_message,
-  ]
-  const nodes = agent?.workflow?.nodes
-  if (nodes && typeof nodes === 'object') {
-    for (const node of Object.values(nodes)) {
-      texts.push(node?.additional_prompt)
-      texts.push(node?.conversation_config?.agent?.prompt?.prompt)
-      texts.push(node?.conversation_config?.agent?.first_message)
-    }
-  }
-  return texts
-}
-
-export function collectVariables(agent) {
-  const map = agent?.conversation_config?.agent?.dynamic_variables?.dynamic_variable_placeholders
-  const declared =
-    map && typeof map === 'object' && !Array.isArray(map)
-      ? Object.entries(map)
-          .filter(([name]) => name && !SKIP_VARIABLE.test(name))
-          .map(([name, placeholder]) => ({
-            name,
-            placeholder: placeholder == null ? '' : String(placeholder),
-          }))
-      : []
-  const seen = new Set(declared.map((item) => item.name))
-  const extras = []
-  for (const text of textsOf(agent)) {
-    if (typeof text !== 'string') continue
-    for (const match of text.matchAll(TOKEN)) {
-      const name = match[1]
-      if (!name || SKIP_VARIABLE.test(name) || seen.has(name)) continue
-      seen.add(name)
-      extras.push({ name, placeholder: '' })
-    }
-  }
-  return [...declared, ...extras]
+export function declaredVariables() {
+  return VARIABLE_FIELDS.map((field) => ({ name: field.name, placeholder: '' }))
 }
 
 export function readVariableValues(declared, input) {

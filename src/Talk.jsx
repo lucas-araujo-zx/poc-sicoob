@@ -9,12 +9,15 @@ import {
   installmentAmount,
   parseNumber,
 } from './negotiation.js'
+import { BrandMark } from './BrandMark.jsx'
 import { Orb } from './Orb.jsx'
 
 const RESULT_ATTEMPTS = 30
 const RESULT_WAIT_MS = 4000
-const CALL_ATTEMPTS = 40
+// A ligação pode levar minutos para começar e a análise só existe depois que ela termina.
+const CALL_ATTEMPTS = 240
 const CALL_WAIT_MS = 5000
+const CALL_MAX_FAILURES = 3
 
 const LABELS = {
   nome_cooperado: 'Nome do cooperado',
@@ -39,6 +42,18 @@ const STATUS_LABEL = {
   done: 'Concluída',
   completed: 'Concluída',
   failed: 'Falhou',
+}
+
+// Etapa da ligação telefônica enquanto ela não terminou.
+function callStageLabel(result) {
+  if (!result) return 'Ligação na fila'
+  return result.status === 'processing' ? 'Analisando a ligação' : 'Ligação em andamento'
+}
+
+function callPendingText(result) {
+  return result?.status === 'processing'
+    ? 'A ligação terminou. Estou gerando a análise.'
+    : 'A ligação está em andamento. A análise entra quando ela terminar.'
 }
 
 function roleOf(message) {
@@ -328,11 +343,13 @@ export function Talk({ token, channel, agent, variables, onBack, onSignOut }) {
     if (!phone || !callId) return undefined
     let cancelled = false
     async function load() {
+      let failures = 0
       for (let attempt = 0; attempt < CALL_ATTEMPTS; attempt += 1) {
         if (attempt > 0) await wait(CALL_WAIT_MS)
         if (cancelled) return
         try {
           const next = await conversationByCall(token, callId)
+          failures = 0
           if (cancelled) return
           if (!next.found) continue
           setConversationId(next.conversationId || '')
@@ -344,12 +361,15 @@ export function Talk({ token, channel, agent, variables, onBack, onSignOut }) {
           }
         } catch (reason) {
           if (cancelled) return
-          setResultError(reason instanceof Error ? reason.message : 'Não foi possível ler o resultado.')
-          return
+          failures += 1
+          if (failures >= CALL_MAX_FAILURES) {
+            setResultError(reason instanceof Error ? reason.message : 'Não foi possível ler o resultado.')
+            return
+          }
         }
       }
       if (!cancelled) {
-        setResultError('A ligação foi para a fila. A análise aparece aqui quando a chamada terminar.')
+        setResultError('Não encontrei o fim desta ligação. O ID da conversa aparece aqui assim que ela existir.')
       }
     }
     load()
@@ -516,7 +536,7 @@ export function Talk({ token, channel, agent, variables, onBack, onSignOut }) {
     <div className={`talk voice ${live || queued ? 'is-live' : ''} ${ended ? 'is-ended' : ''}`}>
       <header className="talk-top">
         <div className="talk-brand">
-          <p className="wordmark">Sicoob</p>
+          <BrandMark />
           <p className="talk-user">{agent.name}</p>
         </div>
         <div className="talk-actions">
@@ -572,7 +592,7 @@ export function Talk({ token, channel, agent, variables, onBack, onSignOut }) {
             {live || queued || ended ? (
               <p className="talk-status">
                 {queued
-                  ? 'Ligação na fila'
+                  ? callStageLabel(result)
                   : live
                     ? status === 'connecting'
                       ? 'Conectando'
@@ -613,7 +633,7 @@ export function Talk({ token, channel, agent, variables, onBack, onSignOut }) {
                   error={resultError}
                   copied={copied}
                   onCopy={copyId}
-                  pending="A ligação está em andamento. A análise entra quando ela terminar."
+                  pending={callPendingText(result)}
                 />
                 <section className="chat" aria-live="polite">
                   <ol className="messages">
