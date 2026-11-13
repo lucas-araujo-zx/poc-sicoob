@@ -1,0 +1,20 @@
+{
+  "name": "sicoob-ciro",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/write-vercel-output.mjs",
+    "preview": "vite preview",
+    "test": "node --test server/*.test.js src/*.test.js"
+  },
+  "dependencies": {
+    "@elevenlabs/client": "0.12.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "vite": "^7.1.10"
+  }
+}
